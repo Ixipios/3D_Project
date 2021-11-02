@@ -3,10 +3,13 @@ from math import sqrt, sin, cos
 import math
 from time import sleep
 import keyboard
+from random import randint
 
 turtle.hideturtle()
 turtle.tracer(0, 0)
 turtle.pensize(2)
+
+render_distance = 150
 
 
 class Vec:
@@ -43,9 +46,24 @@ class Droite:
         self.z = za, direction_vector.z
 
 
+def is_point_visible(point, lens_point):
+    if point[2] <= lens_point[2] or point[2] >= render_distance:
+        return False
+    return True
+
+
+def is_cube_visible(cube, lens_point):
+    visible = False
+    for point in cube:
+        if is_point_visible(point, lens_point):
+            visible = True
+    return visible
+
+
 class World:
-    def __init__(self, cubes):
+    def __init__(self, cubes, lens_point):
         self.cubes = cubes
+        self.lens_point = lens_point
 
     def move(self, vector: Vec):
         for i in range(len(self.cubes)):
@@ -55,7 +73,8 @@ class World:
 
     def draw(self):
         for cube in self.cubes:
-            cube_3d_to_2d(cube)
+            if is_cube_visible(cube, self.lens_point):
+                cube_3d_to_2d(cube, self.lens_point)
         turtle.update()
         sleep(0.01)
         turtle.clear()
@@ -146,15 +165,15 @@ def rotation_point(point, alpha, axis):
     radius = 0
 
 
-def cube_3d_to_2d(cube1):
+def cube_3d_to_2d(cube1, lens_point1):
     cube2 = []
     for i in cube1:
-        print(cube1)
-        print("i:", i)
-        p = projection(i, lens_point)
-        print(p)
+        # print(cube1)
+        # print("i:", i)
+        p = projection(i, lens_point1)
+        # print(p)
         cube2.append((p[0] * -1000000, p[1] * -1000000))
-        print(cube2)
+        # print(cube2)
     draw_cube(cube2)
 
 
@@ -214,10 +233,16 @@ def game_1(world):
     multi-cubes world
     :return:
     """
-    speed = 0.8
-    lens_point1 = (0, 0, 0.001)
+    speed = 0.5
+    lens_point1 = [0, 0, 0.001]
     sneak = 1
     while 1:
+        if keyboard.is_pressed("e"):
+            lens_point1[2] -= 0.0001
+            world.lens_point = lens_point1
+        if keyboard.is_pressed("t"):
+            lens_point1[2] += 0.0001
+            world.lens_point = lens_point1
         if keyboard.is_pressed("d"):
             world.move(Vec(-1, 0, 0))
         if keyboard.is_pressed("q"):
@@ -244,12 +269,20 @@ def game_1(world):
             world.draw()
 
 
+def random_gen(n_cubes, lens_point1):
+    cubes = []
+    for i in range(n_cubes):
+        cubes.append(create_cube((randint(-10, 10), randint(-10, 10), randint(-100, 500)), 2))
+    return World(cubes, lens_point1)
+
+
 lens_point = (0, 0, 0.001)
 cube0 = create_cube((-8, -4, 20), 2)
 cube2 = create_cube((10, -4, 20), 2)
-world1 = World([cube0, cube2, create_cube((-8, -2, 20), 2), create_cube((-2, -6, 20), 2)])
-print(cube0)
-print(len(cube0))
+world1 = World([cube0, cube2, create_cube((-8, -2, 20), 2), create_cube((-2, -6, 20), 2), create_cube((-2, -6, 200), 2),
+                create_cube((8, -6, 250), 2)], lens_point)
+# print(cube0)
+# print(len(cube0))
 cube_2d = []
 """
 for i in cube:
@@ -264,8 +297,8 @@ for i in cube:
 
 draw_point((0, 0))
 # game_0(cube0)
-# game_1(world1)
-rotation_mouse(world1)
+game_1(random_gen(20, lens_point))
+# rotation_mouse(world1)
 
 """
 for a in range(9, 90):
