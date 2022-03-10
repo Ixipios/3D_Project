@@ -1,15 +1,20 @@
 import turtle
-from math import sqrt, sin, cos
+from math import sqrt, sin, cos, acos, asin
 import math
 from time import sleep
 import keyboard
+from pynput import mouse
+from pynput import keyboard as keyboard2
 from random import randint
 
 turtle.hideturtle()
 turtle.tracer(0, 0)
-turtle.pensize(2)
+turtle.pensize(1)
 
-render_distance = 150
+render_distance = 200
+
+mouse = mouse.Controller()
+kb = keyboard2.Controller()
 
 
 class Vec:
@@ -17,7 +22,11 @@ class Vec:
         self.x = x
         self.y = y
         self.z = z
+        self.norme = sqrt(x**2+y**2+z**2)
 
+
+def create_vec(A, B):
+    return Vec(A[0]-B[0], A[1]-B[1], A[2]-B[2])
 
 def vector_sum(u, v):
     return Vec(u.x+v.x, u.y+v.y, u.z+v.z)
@@ -27,12 +36,47 @@ def vector_dif(u, v):
     return Vec(u.x-v.x, u.y-v.y, u.z-v.z)
 
 
-class Droite:
-    def __init__(self, x, y, z):
-        self.x = x
-        self.y = y
-        self.z = z
+def vector_real_mult(u, k):
+    return Vec(k*u.x, k*u.y, k*u.z)
 
+
+def get_columns(A):
+    A_columns = []
+    for i in range(len(A)-1):
+        A_column = []
+        for line in A:
+            A_column.append(line[i])
+        A_columns.append(A_column)
+    return A_columns
+
+
+def column_line_sum(c, l):
+    if len(c) == len(l):
+        sum = 0
+        for i in range(len(c) - 1):
+            sum += c[i] * l[i]
+    else:
+        return 0
+
+
+def matrix_multiplication(A, B):
+    result = []
+    columns_B = get_columns(B)
+    for i in range(len(A)-1):
+        line = []
+        sum = 0
+        for j in range(len(A[i])-1):
+            sum += A[i][j]*columns_B[i][j]
+        line.append(sum)
+    return result
+
+
+class Droite:
+    def __init__(self, point, direction_vector):
+        self.point = point
+        self.direction_vector = direction_vector
+
+    # vecteur directeur --> un vecteur unitaire
     def create_droite(self, A, B):
         xa, ya, za = A
         xb, yb, zb = B
@@ -40,36 +84,67 @@ class Droite:
             direction_vector = Vec(xa-xb, ya-yb, za-zb)
         else:
             direction_vector = Vec(xb-xa, yb-ya, zb-za)
+        k = 1 / direction_vector.norme
+        direction_vector = vector_real_mult(direction_vector, k)
         # print(direction_vector.x, direction_vector.y, direction_vector.z)
-        self.x = xa, direction_vector.x
-        self.y = ya, direction_vector.y
-        self.z = za, direction_vector.z
+        self.point = (xa, ya, za)
+        self.direction_vector = (direction_vector.x, direction_vector.y, direction_vector.z)
+
+
+class Plan:
+    def __init__(self, origin, vec1, vec2):
+        # a point that defines the plan
+        self.origin = origin
+        # two vectors that define the plan
+        self.vec1 = vec1
+        self.vec2 = vec2
+
+    def create(self, A, B, C):
+        self.vec1 = create_vec(A, B)
+        self.vec2 = create_vec(A, C)
+        self.point(A)
 
 
 def is_point_visible(point, lens_point):
-    if point[2] <= lens_point[2] or point[2] >= render_distance:
+    if point[1] <= lens_point[1] or point[1] >= render_distance:
         return False
     return True
 
 
 def is_cube_visible(cube, lens_point):
-    visible = False
-    for point in cube:
-        if is_point_visible(point, lens_point):
-            visible = True
+    visible = True
+    for point in cube.points:
+        if not is_point_visible(point, lens_point):
+            visible = False
     return visible
+
+
+class Cube:
+    def __init__(self, points):
+        self.points = points
+        d1 = Droite(0, 0)
+        d2 = Droite(0, 0)
+        d1.create_droite(points[0], points[6])
+        print(d1.point, d1.direction_vector)
+        d2.create_droite(points[1], points[7])
+        t = 0
+        x1, y1, z1 = d1.point
+        x2, y2, z2 = d2.point
+        a1, b1, c1 = d1.direction_vector
+        a2, b2, c2 = d2.direction_vector
+        if x1 != x2:
+            t = (x1-x2)/(a2-a1)
+        elif y1 != y2:
+            t = (y1-y2)/(b2-b1)
+        else:
+            t = (z1-z2)/(c2-c1)
+        self.center = (x1+a1*t, y1+b1*t, z1+c1*t)
 
 
 class World:
     def __init__(self, cubes, lens_point):
         self.cubes = cubes
         self.lens_point = lens_point
-
-    def move(self, vector: Vec):
-        for i in range(len(self.cubes)):
-            for j in range(len(self.cubes[i])):
-                point = self.cubes[i][j]
-                self.cubes[i][j] = (point[0]+vector.x, point[1]+vector.y, point[2]+vector.z)
 
     def draw(self):
         for cube in self.cubes:
@@ -79,6 +154,16 @@ class World:
         sleep(0.01)
         turtle.clear()
 
+    def move(self, vector: Vec):
+        for i in range(len(self.cubes)):
+            for j in range(len(self.cubes[i].points)):
+                point = self.cubes[i].points[j]
+                self.cubes[i].points[j] = (point[0]+vector.x, point[1]+vector.y, point[2]+vector.z)
+
+    def rotate(self, theta, axis):
+        for cube in self.cubes:
+            rotate_cube(cube, theta, axis)
+
 
 def projection(A, B):
     """
@@ -87,17 +172,25 @@ def projection(A, B):
     :param B: le point-lentille
     :return: un point, la projection de A sur le plan
     """
-    d = Droite(0, 0, 0)
+    d = Droite(0, 0)
     d.create_droite(A, B)
     # print("d:", d.x, d.y, d.z)
-    if d.z[1] != 0:
-        t = (-d.z[0]) / d.z[1]
+    if d.direction_vector[1] != 0:
+        t = (-d.point[1]) / d.direction_vector[1]
     else:
         t = 0
     # print(t)
-    C = (d.x[0] + d.x[1] * t, d.y[0] + d.y[1] * t) # the projection
+    C = (d.point[0] + d.direction_vector[0] * t, d.point[2] + d.direction_vector[2] * t)  # the projection
     # print(C)
     return C
+
+
+def projection_general(A, P):
+    """
+    Project a given point of the 3d-space on a given plan
+    :return: the coordinates of the projection of A on P
+    """
+    # find the coordinates of the intersection
 
 
 def draw_point(p):
@@ -105,6 +198,7 @@ def draw_point(p):
     turtle.goto(p)
     turtle.pendown()
     turtle.fd(1)
+
     # turtle.update()
 
 
@@ -129,9 +223,23 @@ def draw_cube(points):
     draw_line(points[7], points[3])
 
 
+def project_line(A, B, lens_point):
+    new_A = projection(A, lens_point)
+    new_B = projection(B, lens_point)
+    draw_line(new_A, new_B)
+
+
+def project_cube(cube, lens_point):
+    cube_projection = []
+    for point in cube.points:
+        point_projection = projection(point, lens_point)
+        cube_projection.append((point_projection[0] * -1000000, point_projection[1] * -1000000))
+    return cube_projection
+
+
 def create_cube(A, l):
-    points = [A, (A[0]+l, A[1], A[2]), (A[0]+l, A[1]+l, A[2]), (A[0], A[1]+l, A[2]),
-              (A[0], A[1], A[2]+l), (A[0]+l, A[1], A[2]+l), (A[0]+l, A[1]+l, A[2]+l), (A[0], A[1]+l, A[2]+l)]
+    points = [A, (A[0]+l, A[1], A[2]), (A[0]+l, A[1], A[2]+l), (A[0], A[1], A[2]+l),
+              (A[0], A[1]+l, A[2]), (A[0]+l, A[1]+l, A[2]), (A[0]+l, A[1]+l, A[2]+l), (A[0], A[1]+l, A[2]+l)]
     return points
 
 
@@ -161,13 +269,75 @@ def rotation(cube):
         turtle.clear()
 
 
-def rotation_point(point, alpha, axis):
-    radius = 0
+def rotation2(cube):
+    precision = 100
+    zoom = 4*sqrt(5)
+    new_cube = [0] * 8
+    for i in range(2 * 314):
+        i = i / precision
+        cube_to_draw = []
+        for j in range(len(cube)):
+            new_cube[j] = (zoom * cos(i), 0, zoom * sin(i))
+            new_point = projection(
+                [new_cube[j][0] + cube[j][0], new_cube[j][1] + cube[j][1], new_cube[j][2] + cube[j][2]], lens_point)
+            cube_to_draw.append((new_point[0] * -1000000, new_point[1] * -1000000))
+        draw_cube(cube_to_draw)
+        turtle.update()
+        sleep(0.01)
+        turtle.clear()
 
 
-def cube_3d_to_2d(cube1, lens_point1):
+def rotate_point(point, theta, axis: Droite):
+    """ Pour rotations particulières
+    xa, ya, za = point  # the point coordinates
+    a, b, c = axis.x[1], axis.y[1], axis.z[1]  # the coefficients of the axis equation
+    xb, yb, zb = axis.x[0], axis.y[0], axis.z[0]  # the point coordinates of the axis equation
+    d = -a*xa - b*ya - c*za  # the d of the Cartesian equation of the plan: ax + by + cz + d = 0
+    t = (-a*xb - b*yb - c*zb - d)/(a**2 + b**2 + c ** 2)  # the variable of the parametric equation of the axis
+    xi, yi, zi = (xb + a*t, yb + b*t, zb + c*t)  # I is the point of intersection between the axis and the plan
+    radius = sqrt((xa-xi)**2 + (ya-yi)**2 + (za-zi)**2)
+    alpha = acos((xa - xi)/radius) + alpha
+    new_point = (radius * cos(alpha) + xi, yi, radius * sin(alpha) + zi)
+    print(new_point)
+    print(xi, yi, zi)
+    return new_point
+    """
+    # rotation générale
+    point1 = (point[0]-axis.point[0], point[1]-axis.point[1], point[2]-axis.point[2])
+    x, y, z = axis.direction_vector  # the coefficients of the axis equation
+    d, e, f = point1
+    c = cos(theta)
+    c1 = 1-c
+    s = sin(theta)
+    # matrice de rotation
+    rotation_matrix = [[(x**2)*c1+c, x*y*c1-z*s, x*z*c1+y*s],
+                       [x*y*c1+z*s, (y**2)*c1+c, y*z*c1-x*s],
+                       [x*z*c1-y*s, y*z*c1+x*s, (z**2)*c1+c]]
+    # matrice sous forme mais représente bien une colone de coordonnées
+    new_point = [d*rotation_matrix[0][0]+e*rotation_matrix[0][1]+f*rotation_matrix[0][2]+axis.point[0],
+                 d*rotation_matrix[1][0]+e*rotation_matrix[1][1]+f*rotation_matrix[1][2]+axis.point[1],
+                 d*rotation_matrix[2][0]+e*rotation_matrix[2][1]+f*rotation_matrix[2][2]+axis.point[2]]
+    return new_point
+
+
+def rotate_cube(cube, theta, axis):
+    new_points = []
+    for point in cube.points:
+        new_points.append(rotate_point(point, theta, axis))
+    cube.points = new_points
+
+
+def rotation_cube(cube, alpha, axis):
+    new_cube = []
+    for point in cube:
+        new_cube.append(rotate_point(point, alpha, axis))
+    print(new_cube)
+    return new_cube
+
+
+def cube_3d_to_2d(cube1: Cube, lens_point1):
     cube2 = []
-    for i in cube1:
+    for i in cube1.points:
         # print(cube1)
         # print("i:", i)
         p = projection(i, lens_point1)
@@ -178,11 +348,11 @@ def cube_3d_to_2d(cube1, lens_point1):
 
 
 def rotation_mouse(world):
-    precision = 10
-    zoom = 1
-    for i in range(31, 3*31):
-        i = i / precision
-        world.move(Vec(zoom*cos(i), 0, zoom*sin(i)))
+    while 1:
+        if keyboard.is_pressed("q"):
+            world.rotate(math.pi/50, -1)
+        if keyboard.is_pressed("d"):
+            world.rotate(math.pi/50, 1)
         world.draw()
 
 
@@ -236,21 +406,41 @@ def game_1(world):
     speed = 0.5
     lens_point1 = [0, 0, 0.001]
     sneak = 1
+    mouse_pos = (1280/2, 720/2)
+    dx = Droite((0, 0, 0), (0, 0, 1))
+    dy = Droite((0, 0, 0), (1, 0, 0))
+    speed_rot = 100
+    speed = 0.4
+    menu = False
     while 1:
-        if keyboard.is_pressed("e"):
-            lens_point1[2] -= 0.0001
-            world.lens_point = lens_point1
-        if keyboard.is_pressed("t"):
-            lens_point1[2] += 0.0001
-            world.lens_point = lens_point1
+        if not menu:
+            mouse.move(1280/2-mouse.position[0], 720/2-mouse.position[1])
         if keyboard.is_pressed("d"):
-            world.move(Vec(-1, 0, 0))
+            world.move(Vec(-speed, 0, 0))
         if keyboard.is_pressed("q"):
-            world.move(Vec(1, 0, 0))
+            world.move(Vec(speed, 0, 0))
         if keyboard.is_pressed("z"):
-            world.move(Vec(0, 0, -1))
+            world.move(Vec(0, -speed, 0))
         if keyboard.is_pressed("s"):
-            world.move(Vec(0, 0, 1))
+            world.move(Vec(0, speed, 0))
+        if keyboard.is_pressed("esc"):
+            menu = not menu
+        if not menu:
+            d_posx = mouse_pos[0] - mouse.position[0]
+            print(mouse.position)
+            if d_posx > 0:
+                world.rotate(d_posx/speed_rot, dx)
+                print("1 rotating x", d_posx/speed_rot)
+            elif d_posx < 0:
+                world.rotate(d_posx/speed_rot, dx)
+                print("-1 rotating x", d_posx/speed_rot)
+            d_posy = mouse_pos[1] - mouse.position[1]
+            if d_posy > 0:
+                world.rotate(d_posy/speed_rot, dy)
+                print("1 rotating y", d_posy/speed_rot)
+            elif d_posy < 0:
+                world.rotate(d_posy/100, dy)
+                print("-1 rotating y", d_posy/speed_rot)
         """
         if keyboard.read_key() == "ctrl":
             for i in range(len(cube1)):
@@ -259,28 +449,28 @@ def game_1(world):
         """
         if keyboard.is_pressed(" "):
             for x in range(-10, 0):
-                world.move(Vec(0, - ((-x / 5) ** 2 / 4), 0))
+                world.move(Vec(0, 0, - ((-x / 5) ** 2 / 4)))
                 world.draw()
             # sleep(0.06)
             for x in range(11):
-                world.move(Vec(0, (-x / 5) ** 2 / 4, 0))
+                world.move(Vec(0, 0, (-x / 5) ** 2 / 4))
                 world.draw()
         else:
             world.draw()
+        mouse_pos = mouse.position
 
 
 def random_gen(n_cubes, lens_point1):
     cubes = []
     for i in range(n_cubes):
-        cubes.append(create_cube((randint(-10, 10), randint(-10, 10), randint(-100, 500)), 2))
+        cubes.append(create_cube((randint(-10, 10), randint(-100, 500), randint(-10, 10)), 2))
     return World(cubes, lens_point1)
 
 
-lens_point = (0, 0, 0.001)
-cube0 = create_cube((-8, -4, 20), 2)
-cube2 = create_cube((10, -4, 20), 2)
-world1 = World([cube0, cube2, create_cube((-8, -2, 20), 2), create_cube((-2, -6, 20), 2), create_cube((-2, -6, 200), 2),
-                create_cube((8, -6, 250), 2)], lens_point)
+lens_point = (0, 0.001, 0)
+cube0 = Cube(create_cube((0, 15, 0), 2))
+cube2 = Cube(create_cube((10, 20, -6), 2))
+world2 = World([cube0], lens_point)
 # print(cube0)
 # print(len(cube0))
 cube_2d = []
@@ -295,10 +485,46 @@ for i in cube:
     draw_cube(cube_2d)
 """
 
-draw_point((0, 0))
+# draw_point((0, 0))
 # game_0(cube0)
-game_1(random_gen(20, lens_point))
-# rotation_mouse(world1)
+# game_1(random_gen(10, lens_point))
+# rotation_mouse(world2)
+# (cube0)
+# rotation_point((-8, 40, -4), 2, 2)
+# rotation2(create_cube((-8, 40, -4), 2))
+"""
+for i in range(2 * 314):
+    i = i / precision
+    cube0 = rotation_cube(cube0, i, d1)
+    cube_projection = project_cube(cube0, lens_point)
+    draw_cube(cube_projection)
+    draw_point((0, 0))
+    turtle.update()
+    sleep(0.01)
+    turtle.clear()
+"""
+
+# print(matrix_multiplication([[1, 2], [1, 3]], [[1], [2]]))
+world1 = World([cube0, cube2, Cube(create_cube((-8, 20, -2), 2)), Cube(create_cube((-2, 20, -6), 2)), Cube(create_cube((-2, 200, -6), 2)),
+                Cube(create_cube((8, 250, -6), 2))], lens_point)
+world2 = World([cube0], lens_point)
+
+
+def rotation():
+    p1 = [1, 10, 0]
+    d1 = Droite(0, 0)
+    d1.create_droite(cube0.center, (cube0.center[0], cube0.center[1]+1, cube0.center[2]))
+    # d1.create_droite((0, 0, 0), (0, 0, 1))
+    speed = 250
+    for i in range(500):
+        rotate_cube(cube0, math.pi/speed, d1)
+        draw_cube(project_cube(cube0, lens_point))
+        turtle.update()
+        sleep(0.01)
+        turtle.clear()
+
+# rotation()
+game_1(world1)
 
 """
 for a in range(9, 90):
