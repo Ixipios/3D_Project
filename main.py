@@ -18,15 +18,22 @@ kb = keyboard2.Controller()
 
 
 class Vec:
-    def __init__(self, x, y,z):
+    def __init__(self, x, y, z):
         self.x = x
         self.y = y
         self.z = z
-        self.norme = sqrt(x**2+y**2+z**2)
+        self.norm = sqrt(x**2+y**2+z**2)
+
+    def __int__(self, p1, p2):
+        self.x = p2[0]-p1[0]
+        self.y = p2[1]-p1[1]
+        self.z = p2[2]-p1[2]
+        self.norm = sqrt(self.x**2+self.y**2+self.z**2)
 
 
 def create_vec(A, B):
     return Vec(A[0]-B[0], A[1]-B[1], A[2]-B[2])
+
 
 def vector_sum(u, v):
     return Vec(u.x+v.x, u.y+v.y, u.z+v.z)
@@ -38,6 +45,10 @@ def vector_dif(u, v):
 
 def vector_real_mult(u, k):
     return Vec(k*u.x, k*u.y, k*u.z)
+
+
+def dot_product(u, v):
+    return u.x*v.x + u.y*v.y + u.z*v.z
 
 
 def get_columns(A):
@@ -84,7 +95,7 @@ class Droite:
             direction_vector = Vec(xa-xb, ya-yb, za-zb)
         else:
             direction_vector = Vec(xb-xa, yb-ya, zb-za)
-        k = 1 / direction_vector.norme
+        k = 1 / direction_vector.norm
         direction_vector = vector_real_mult(direction_vector, k)
         # print(direction_vector.x, direction_vector.y, direction_vector.z)
         self.point = (xa, ya, za)
@@ -92,12 +103,11 @@ class Droite:
 
 
 class Plan:
-    def __init__(self, origin, vec1, vec2):
+    def __init__(self, origin, normal_vector: Vec):
         # a point that defines the plan
         self.origin = origin
         # two vectors that define the plan
-        self.vec1 = vec1
-        self.vec2 = vec2
+        self.normal_vector = normal_vector
 
     def create(self, A, B, C):
         self.vec1 = create_vec(A, B)
@@ -117,6 +127,24 @@ def is_cube_visible(cube, lens_point):
         if not is_point_visible(point, lens_point):
             visible = False
     return visible
+
+
+def orthogonal_projection(point, plane: Plan):
+    """
+    Project a point on a given plan
+    :param point: the point to project on the plan
+    :param plane: the plan to project the point on
+    :return: the projection (a point as a tuple) of the point on the plane
+    """
+    # look to the photos for more explanation
+    d = Droite(point, plane.normal_vector)
+    vec = Vec(point, plane.origin)
+    t = dot_product(vec, plane.normal_vector) / plane.normal_vector.norm
+    return plane.normal_vector.x * t + point[0], plane.normal_vector.y * t + point[1], plane.normal_vector.z * t + point[2]
+
+
+def cube_equation(cube):
+    pass
 
 
 class Cube:
@@ -409,7 +437,7 @@ def game_1(world):
     mouse_pos = (1280/2, 720/2)
     dx = Droite((0, 0, 0), (0, 0, 1))
     dy = Droite((0, 0, 0), (1, 0, 0))
-    speed_rot = 100
+    speed_rot = 700
     speed = 0.4
     menu = False
     while 1:
